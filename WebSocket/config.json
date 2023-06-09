@@ -1,0 +1,17 @@
+{
+    "server": {
+        "PORT": 8081
+    },
+    "tokens": {
+        "access": {
+            "secretKey": "secretKey"
+        },
+        "refresh": {
+            "secretKey": "refreshSecretKey"
+        }
+    },
+    "dbConfig": {
+        "connectionString": "postgres://dqwequwv:QLZgf_PDJhU5sejHXvcUUt8J9SB3Y1nP@mouse.db.elephantsql.com/dqwequwv",
+        "ssl": true
+    }
+}

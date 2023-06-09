@@ -1,0 +1,7 @@
+.message .message_complaint_btn {
+    display: none;
+}
+
+.message:hover .message_complaint_btn {
+    display: flex;
+}
