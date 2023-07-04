@@ -3,22 +3,14 @@ import {
   Box,
   Button,
   Container,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
   FormControl,
   FormControlLabel,
-  FormHelperText,
   FormLabel,
   Grid,
   IconButton,
-  MenuItem,
   Radio,
   RadioGroup,
-  Select,
-  SelectChangeEvent,
+  SxProps,
   TextField,
   Typography,
 } from "@mui/material";
@@ -33,7 +25,10 @@ import Linkify from "react-linkify";
 import { setComplaintWindow } from "../features/complaintWindow/complaintWindowSlice";
 import FlagIcon from "@mui/icons-material/Flag";
 import ".././style/pages/chat.css";
-import { Message } from "../types/simplifiedDatabase";
+import { Message } from "../types/simplifiedDatabaseTypes";
+import { roomStatus } from "../types/webSocketTypes";
+import { isMobile } from "react-device-detect";
+import { useScreenOrientation } from "../hooks";
 
 //////////////////////////////
 
@@ -69,7 +64,7 @@ const FindRoomForm: React.FC<FindRoomFormProps> = ({ handleSubmit }) => {
           language: language || null,
           age_from: ageFrom || null,
           age_to: ageTo || null,
-          gender: gender || null,
+          gender: gender!==undefined ? gender : null,
         });
       }}
       sx={{ mt: 1 }}
@@ -176,9 +171,10 @@ type ChatComponentProps = {
   messages: Message[];
   roomUsers: RoomUser[];
   handleSubmit: (event: FormEvent<HTMLFormElement>) => any;
-  roomClosed: boolean;
+  roomStatus: roomStatus;
   handleFindNewRoom: () => any;
-  handleComplaint?:(target_id:number,message_id?:string)=>any
+  handleStopSearching: () => any;
+  handleComplaint?: (target_id: number, message_id?: string) => any;
 };
 
 type RoomUser = {
@@ -187,54 +183,132 @@ type RoomUser = {
   avatar_url: string | null;
 };
 
+type MessageInfoProps = {
+  text: string;
+};
+
+const MessageInfo: React.FC<MessageInfoProps> = ({ text }) => {
+  return (
+    <Box paddingX={"12px"} paddingY={"6px"}>
+      {text}
+    </Box>
+  );
+};
+
 export type MessageTextProps = {
   text: string;
-  username?: string;
-  avatar_url?: string;
-  time?: string;
-  isFirst?: boolean;
   handleComplaint?: () => any;
   blockMargin?: boolean;
   urls?: boolean;
+  messageBoxSx?: SxProps;
+};
+
+export type MessagesContainerProps = {
+  messages: Message[];
+  avatar_url?: string;
+  time?: string;
+  username?: string;
+  handleComplaint?: (target_id: number, message_id?: string) => any;
+  urls?: boolean;
+};
+
+export const MessagesContainer: React.FC<MessagesContainerProps> = ({
+  messages,
+  avatar_url,
+  time,
+  username,
+  handleComplaint,
+  urls,
+}) => {
+  const user = useAppSelector(selectUser);
+
+  return (
+    <Box sx={{ width: "100%", mt: "12px" }}>
+      <Grid container columnSpacing={2} sx={{ width: "100%" }}>
+        <Grid item xs="auto">
+          <Avatar src={avatar_url} sx={{ mt: "0px" }}>
+            {username && username[0]}
+          </Avatar>
+        </Grid>
+        <Grid item xs>
+          <Box sx={{ lineHeight: "14px", mb: "8px" }}>
+            <Grid container columnSpacing={2} display={'flex'} flexDirection={'row'}>
+              {username && (
+                <Grid item color={"rgb(25, 118, 210)"}>
+                  {username}
+                </Grid>
+              )}
+              {time && (
+                <Grid item color={"#999999"} fontWeight={500}>
+                  {time}
+                </Grid>
+              )}
+            </Grid>
+          </Box>
+          <Box>
+            {messages.map((m, i) => {
+              switch (message_type_index_to_type[m.type]) {
+                case "text": {
+                  return (
+                    <MessageText
+                      {...(user.info?.id !== m.sender_id &&
+                        handleComplaint && {
+                          handleComplaint: () =>
+                            handleComplaint(m.sender_id, m.id),
+                        })}
+                      text={m.text}
+                      key={m.id}
+                      {...(i === 0 && { messageBoxSx: { mt: 0 } })}
+                      urls={urls}
+                    />
+                  );
+                }
+                default:
+                  return <></>;
+              }
+            })}
+          </Box>
+        </Grid>
+      </Grid>
+    </Box>
+  );
 };
 
 export const MessageText: React.FC<MessageTextProps> = ({
   text,
-  username,
-  avatar_url,
-  time,
-  isFirst = true,
   handleComplaint,
   blockMargin = true,
   urls = true,
+  messageBoxSx,
 }) => {
   return (
     <Box
       sx={{
         width: "100%",
         ...(blockMargin && {
-          marginBlock: "6px",
-          marginTop: isFirst ? "12px" : "6px",
+          marginBlock: "8px",
+          // marginTop: isFirst ? "12px" : "6px",
         }),
+        ...messageBoxSx,
       }}
       className="message"
     >
       <Grid container sx={{ height: "100%" }} columnSpacing={2}>
-        <Grid item xs={2} sm={1.5} display={"flex"} justifyContent={"center"}>
+        {/* <Grid item xs={2} sm={1.5} display={"flex"} justifyContent={"center"}>
           {isFirst && (
             <Avatar src={avatar_url}>{username && username[0]}</Avatar>
           )}
-        </Grid>
+        </Grid> */}
         <Grid
           item
-          xs={9}
-          sm={9.5}
+          xs={11}
+          sm={11}
           display={"flex"}
           alignItems={"start"}
           justifyContent={"end"}
           flexDirection={"column"}
         >
-          {isFirst && (
+          {/* {isFirst && (
             <Box flexGrow={1}>
               <Grid container spacing={2}>
                 {username && (
@@ -249,13 +323,15 @@ export const MessageText: React.FC<MessageTextProps> = ({
                 )}
               </Grid>
             </Box>
-          )}
+          )} */}
           <Box
             sx={{
               minHeight: "18px",
               verticalAlign: "bottom",
               whiteSpace: "pre-line",
               wordBreak: "break-all",
+              lineHeight: "20px",
+              color: "#444444",
             }}
           >
             {urls ? (
@@ -273,23 +349,25 @@ export const MessageText: React.FC<MessageTextProps> = ({
             )}
           </Box>
         </Grid>
-        <Grid
-          item
-          xs={1}
-          sx={{ display: "flex", justifyContent: "end", alignItems: "start" }}
-        >
-          {handleComplaint && (
-            <IconButton
-              sx={{ padding: 0 }}
-              className="message_complaint_btn"
-              disableRipple
-              disableFocusRipple
-              onClick={handleComplaint}
-            >
-              <FlagIcon fontSize="small" />
-            </IconButton>
-          )}
-        </Grid>
+        {handleComplaint && (
+          <Grid
+            item
+            xs={1}
+            sx={{ display: "flex", justifyContent: "end", alignItems: "start" }}
+          >
+            {handleComplaint && (
+              <IconButton
+                sx={{ padding: 0 }}
+                className="message_complaint_btn"
+                disableRipple
+                disableFocusRipple
+                onClick={handleComplaint}
+              >
+                <FlagIcon fontSize="small" />
+              </IconButton>
+            )}
+          </Grid>
+        )}
       </Grid>
     </Box>
   );
@@ -299,27 +377,17 @@ const ChatComponent: React.FC<ChatComponentProps> = ({
   messages,
   roomUsers,
   handleSubmit,
-  roomClosed,
+  roomStatus,
   handleFindNewRoom,
-  handleComplaint
+  handleComplaint,
+  handleStopSearching,
 }) => {
   const dispatch = useAppDispatch();
   const user = useAppSelector(selectUser);
 
-  type MessageInfoProps = {
-    text: string;
-  };
-
-  const MessageInfo: React.FC<MessageInfoProps> = ({ text }) => {
-    return (
-      <Box paddingX={"12px"} paddingY={"6px"}>
-        {text}
-      </Box>
-    );
-  };
-
   const inputRef = useRef<HTMLInputElement>(null);
   const chatBoxRef = useRef<HTMLDivElement>(null);
+  const orientation = useScreenOrientation();
 
   useEffect(() => {
     if (chatBoxRef.current) {
@@ -331,144 +399,261 @@ const ChatComponent: React.FC<ChatComponentProps> = ({
     <Box
       sx={{
         width: "100%",
-        height: "80vh",
-        borderRadius: "10px",
+        height: isMobile ? "92vh" : "80vh",
+        borderRadius: isMobile ? "0px" : "10px",
         overflow: "hidden",
         border: "1px solid gray",
+        flexGrow: isMobile ? 1 : 0,
+        display: "flex",
+        flexDirection: "column",
+        boxSizing: "border-box",
+        position: isMobile ? "relative" : "static",
+        // top:"0px",
+        bottom: "0px",
       }}
     >
+      {!isMobile && (
+        <Box
+          sx={{
+            backgroundColor: "rgb(25, 118, 210)",
+            height: "10%",
+            boxSizing: "border-box",
+            borderBottom: "1px solid gray",
+            padding: "24px",
+            color: "white",
+            textAlign: "center",
+            fontWeight: "600",
+          }}
+        >
+          <h3 style={{ margin: 0 }}>Room</h3>
+        </Box>
+      )}
       <Box
         sx={{
-          backgroundColor: "rgb(25, 118, 210)",
-          height: "10%",
+          height: isMobile ? "82vh" : "80%",
           boxSizing: "border-box",
-          borderBottom: "1px solid gray",
-          padding: "24px",
-          color: "white",
-          textAlign: "center",
-          fontWeight: "600",
-        }}
-      >
-        <h3 style={{ margin: 0 }}>Room</h3>
-      </Box>
-      <Box
-        sx={{
-          height: "80%",
-          boxSizing: "border-box",
-          borderBottom: "1px solid gray",
-          paddingInline: "24px",
           display: "flex",
-          justifyContent: "start",
+          justifyContent: "end",
           alignItems: "start",
           flexDirection: "column",
           overflowY: "auto",
+          flexGrow: isMobile ? 1 : 0,
+          marginBottom: isMobile ? "10vh" : 0,
+        }}
+      >
+        <Box sx={{
+          boxSizing: "border-box",
+          display: "flex",
+          flexDirection: "column",
+          bottom:0,
+          overflow:'auto',
+          width:"100%"
         }}
         ref={chatBoxRef}
-      >
-        {messages.map((msg, i, arr) => {
-          switch (message_type_index_to_type[msg.type]) {
-            case "text":
-              const prevMessage = arr[i - 1];
+        >
+          <Box sx={{
+            boxSizing: "border-box",
+            display: "flex",
+            flexDirection: "column",
+            paddingInline: "24px",
+            paddingBottom:"24px"
+          }}
+          >
+          {messages
+            .reduce((result: Message[][], message: Message) => {
+              const lastSubarray = result[result.length - 1];
+              if (
+                lastSubarray &&
+                lastSubarray[0].sender_id === message.sender_id
+              ) {
+                lastSubarray.push(message);
+              } else {
+                result.push([message]);
+              }
+              return result;
+            }, [])
+            .map((msgArr, i, arr) => {
+              // msgArr.map((msg)=>{
+              //   switch (message_type_index_to_type[msg.type]) {
+              //     case "text":
+              //       const prevMessage = arr[i - 1];
 
-              const roomUser = roomUsers.find(
-                (ru: RoomUser) => ru.id === msg.sender_id
-              );
+              //       const roomUser = roomUsers.find(
+              //         (ru: RoomUser) => ru.id === msg.sender_id
+              //       );
 
-              const dataTime = convertDateTime(
-                msg.timestamp,
-                Math.abs(new Date().getTimezoneOffset() / 60)
-              );
+              //       const dataTime = convertDateTime(
+              //         msg.timestamp,
+              //         Math.abs(new Date().getTimezoneOffset() / 60)
+              //       );
 
-              const isMessageFirst =
-                prevMessage !== undefined
-                  ? prevMessage.sender_id !== msg.sender_id
-                  : true;
+              //       const isMessageFirst =
+              //         prevMessage !== undefined
+              //           ? prevMessage.sender_id !== msg.sender_id
+              //           : true;
 
-              console.log(isMessageFirst);
+              //       console.log(isMessageFirst);
 
-              const props: MessageTextProps = {
-                text: msg.text,
-                username:
-                  isMessageFirst && roomUser?.username
-                    ? roomUser.username
-                    : undefined,
-                avatar_url:
-                  isMessageFirst && roomUser?.avatar_url
-                    ? roomUser.avatar_url
-                    : undefined,
-                time:
-                  isMessageFirst && roomUser
-                    ? padZeroes(dataTime.hour) +
-                      ":" +
-                      padZeroes(dataTime.minute)
-                    : undefined,
-                isFirst: isMessageFirst,
-              };
+              //       const props: MessageTextProps = {
+              //         text: msg.text,
+              //         username:
+              //           isMessageFirst && roomUser?.username
+              //             ? roomUser.username
+              //             : undefined,
+              //         avatar_url:
+              //           isMessageFirst && roomUser?.avatar_url
+              //             ? roomUser.avatar_url
+              //             : undefined,
+              //         time:
+              //           isMessageFirst && roomUser
+              //             ? padZeroes(dataTime.hour) +
+              //               ":" +
+              //               padZeroes(dataTime.minute)
+              //             : undefined,
+              //         isFirst: isMessageFirst,
+              //       };
 
-              console.log(props);
+              //       console.log(props);
+
+              //       return (
+              //         <MessageText
+              //           {...props}
+              //           key={msg.id}
+              //           {...(handleComplaint &&
+              //             user.info?.id !== msg.sender_id && {
+              //               handleComplaint: () =>
+              //                 handleComplaint(msg.sender_id, msg.id),
+              //             })}
+              //         />
+              //       );
+              //     case "info":
+              //       return <div></div>;
+              //     default:
+              //       return <></>;
+              //   }
+              // })
 
               return (
-                <MessageText
-                  {...props}
-                  key={msg.id}
-                  {...(handleComplaint && user.info?.id !== msg.sender_id && {
-                    handleComplaint:()=>handleComplaint(msg.sender_id,msg.id),
-                  })}
+                <MessagesContainer
+                  messages={msgArr}
+                  {...(() => {
+                    const dataTime = convertDateTime(
+                      msgArr[0].timestamp,
+                      Math.abs(new Date().getTimezoneOffset() / 60)
+                    );
+
+                    const roomUser = roomUsers.find(
+                      (ru: RoomUser) => ru.id === msgArr[0].sender_id
+                    );
+
+                    return {
+                      time:
+                        padZeroes(dataTime.hour) +
+                        ":" +
+                        padZeroes(dataTime.minute),
+                      username: roomUser?.username,
+                      avatar_url: roomUser?.avatar_url || undefined,
+                    };
+                  })()}
+                  key={i}
+                  handleComplaint={handleComplaint}
                 />
               );
-            case "info":
-              return <div></div>;
-            default:
-              return <></>;
-          }
-        })}
+            })}
+          </Box>
+        </Box>
       </Box>
-      <Box sx={{ height: "10%", boxSizing: "border-box" }}>
-        {roomClosed ? (
-          <Box
-            sx={{
-              mt: 1,
-              padding: "16px",
-              height: "100%",
-              boxSizing: "border-box",
-              margin: 0,
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "center",
-              flexDirection: "column",
-            }}
-          >
-            <Typography sx={{ textAlign: "center" }}>Room closed</Typography>
-            <Button onClick={handleFindNewRoom}>Find new room</Button>
-          </Box>
-        ) : (
-          <Box
-            component="form"
-            onSubmit={(e) => {
-              handleSubmit(e);
-              if (inputRef.current) inputRef.current.value = "";
-            }}
-            sx={{
-              mt: 1,
-              padding: "16px",
-              height: "100%",
-              boxSizing: "border-box",
-              margin: 0,
-            }}
-          >
-            <TextField
-              margin="none"
-              required
-              fullWidth
-              name="message"
-              type="text"
-              id="message"
-              sx={{ height: "100%", boxSizing: "border-box" }}
-              InputProps={{ style: { height: "100%" } }}
-              inputRef={inputRef}
-            />
-          </Box>
-        )}
+      <Box
+        sx={{
+          height: orientation.includes('landscape')&&isMobile?"10vw":"10vh",
+          boxSizing: "border-box",
+          position: isMobile ? "fixed" : "static",
+          width: "100%",
+          bottom: "0px",
+          borderTop: "1px solid gray",
+          backgroundColor: "white",
+        }}
+      >
+        {(() => {
+          switch (roomStatus) {
+            case "room_found": {
+              return (
+                <Box
+                  component="form"
+                  onSubmit={(e) => {
+                    handleSubmit(e);
+                    if (inputRef.current) inputRef.current.value = "";
+                  }}
+                  sx={{
+                    mt: 1,
+                    padding: "16px",
+                    height: "100%",
+                    boxSizing: "border-box",
+                    margin: 0,
+                  }}
+                >
+                  <TextField
+                    margin="none"
+                    required
+                    fullWidth
+                    name="message"
+                    type="text"
+                    id="message"
+                    sx={{ height: "100%", boxSizing: "border-box" }}
+                    InputProps={{ style: { height: "100%" } }}
+                    inputRef={inputRef}
+                  />
+                </Box>
+              );
+            }
+            case "room_closed": {
+              return (
+                <Box
+                  sx={{
+                    mt: 1,
+                    padding: "16px",
+                    height: "100%",
+                    boxSizing: "border-box",
+                    margin: 0,
+                    display: "flex",
+                    justifyContent: "center",
+                    alignItems: "center",
+                    flexDirection: "column",
+                  }}
+                >
+                  <Typography sx={{ textAlign: "center" }}>
+                    Room closed
+                  </Typography>
+                  <Button onClick={handleFindNewRoom}>Find new room</Button>
+                </Box>
+              );
+            }
+            case "searching": {
+              return (
+                <Box
+                  sx={{
+                    mt: 1,
+                    padding: "16px",
+                    height: "100%",
+                    boxSizing: "border-box",
+                    margin: 0,
+                    display: "flex",
+                    justifyContent: "center",
+                    alignItems: "center",
+                    flexDirection: "column",
+                  }}
+                >
+                  <Typography sx={{ textAlign: "center" }}>
+                    Searching room...
+                  </Typography>
+                  <Button onClick={handleStopSearching} color="secondary">
+                    Stop
+                  </Button>
+                </Box>
+              );
+            }
+          }
+        })()}
       </Box>
     </Box>
   );
@@ -482,11 +667,10 @@ const Chat = () => {
 
   const [ws, setWs] = useState<WebSocket | null>(null);
   const [wsReadyState, setWsReadyState] = useState<number | null>(null);
-  const [roomFound, setRoomFound] = useState<boolean>(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [roomUsers, setRoomUsers] = useState<RoomUser[]>([]);
-  const [roomClosed, setRoomClosed] = useState<boolean>(false);
-  const [roomId,setRoomId] = useState<number|null>(null);
+  const [roomStatus, setRoomStatus] = useState<roomStatus>("default");
+  const [roomId, setRoomId] = useState<number | null>(null);
 
   const findRoomFormHandler = async (data: FindRoomFormSubmitData) => {
     const message = {
@@ -529,15 +713,14 @@ const Chat = () => {
   };
 
   const findNewRoomHandler = async () => {
-    setRoomClosed(false);
-    setRoomFound(false);
+    setRoomStatus("default");
     setMessages([]);
     setRoomUsers([]);
   };
 
   const complaintHandler = (target_id: number, message_id?: string) => {
     const target = roomUsers.find((rm) => rm.id === target_id);
-    
+
     dispatch(
       setComplaintWindow({
         target: {
@@ -551,7 +734,20 @@ const Chat = () => {
               }
             : { user_id: target_id }),
         },
-        room_id:roomId
+        room_id: roomId,
+      })
+    );
+  };
+
+  const stopSearchingHandler = () => {
+    ws?.send(
+      JSON.stringify({
+        type: "leave_room",
+        data: {
+          auth: {
+            access_token: cookie.get("acs"),
+          },
+        },
       })
     );
   };
@@ -569,23 +765,26 @@ const Chat = () => {
           console.log(data);
 
           switch (data.type) {
-            case "room_searching": {
-              setRoomFound(data.data.room_found);
-              setRoomId(data.data.room_id);
+            case "room": {
+              switch (data.status) {
+                case "room_found": {
+                  setRoomId(data.data.room_id);
 
-              console.log(data.data.room_id);
-
-              if (data.data.room_found) {
-                setRoomUsers(data.data.users);
+                  setRoomUsers(data.data.users);
+                  break;
+                }
+                case "searching": {
+                  break;
+                }
+                case "room_closed": {
+                  break;
+                }
               }
+              setRoomStatus(data.status);
               break;
             }
             case "new_message": {
               setMessages((prev) => [...prev, data.data.message]);
-              break;
-            }
-            case "room_closed": {
-              setRoomClosed(true);
               break;
             }
           }
@@ -606,19 +805,31 @@ const Chat = () => {
     }
   }, [userStatus, user]);
 
-  console.log(messages.length);
+  console.log(roomStatus);
 
   return (
-    <Container maxWidth={"sm"} sx={{ paddingTop: "24px" }}>
+    <Container
+      maxWidth={isMobile?"xl":"sm"}
+      sx={{
+        paddingTop: isMobile && roomStatus !== "default" ? "0px" : "24px",
+        height: "100%",
+        flexGrow: 1,
+        display: "flex",
+        flexDirection: "column",
+        position: "relative",
+      }}
+      disableGutters={isMobile && roomStatus !== "default"}
+    >
       {wsReadyState === 1 ? (
-        roomFound ? (
+        roomStatus !== "default" ? (
           <ChatComponent
             messages={messages}
             roomUsers={roomUsers}
             handleSubmit={chatFormHandler}
-            roomClosed={roomClosed}
+            roomStatus={roomStatus}
             handleFindNewRoom={findNewRoomHandler}
             handleComplaint={complaintHandler}
+            handleStopSearching={stopSearchingHandler}
           />
         ) : (
           <Box>

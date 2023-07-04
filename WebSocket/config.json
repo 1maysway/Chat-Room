@@ -4,9 +4,11 @@
     },
     "tokens": {
         "access": {
+            "expiresIn": 600,
             "secretKey": "secretKey"
         },
         "refresh": {
+            "expiresIn": 60000,
             "secretKey": "refreshSecretKey"
         }
     },

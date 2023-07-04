@@ -1,5 +1,5 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
-import { fetchUserInitialData } from "./userAPI";
+import { authentication } from "./userAPI";
 import { RootState } from "../../app/store";
 
 export type User = {
@@ -8,6 +8,9 @@ export type User = {
     id: number;
     username: string;
     avatarUrl: string | null;
+    role:number;
+    email_confirmed:boolean;
+    status:number;
   } | null;
 };
 
@@ -27,7 +30,7 @@ const initialState: UserState = {
 export const fetchUser = createAsyncThunk(
   "user/fetchUser",
   async () => {
-    const response:User = (await fetchUserInitialData());
+    const response:User = (await authentication());
     console.log(response);
     
     return response;

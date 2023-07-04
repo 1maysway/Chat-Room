@@ -4,11 +4,11 @@ const config = require('../config.json');
 //////////////////////
 
 async function jwtVerify(token, key) {
-    if (!token) return {};
-    return new Promise((resolve, reject) =>
-        jwt.verify(token, key, (err, decoded) => err ? reject({}) :
+    return new Promise((resolve, reject) => {
+        if (!token) return resolve(null);
+        return jwt.verify(token, key, (err, decoded) => err ? resolve(null) :
             resolve(decoded))
-    );
+    });
 }
 
 async function verifyToken(token) {
@@ -30,7 +30,17 @@ async function verifyToken(token) {
     }
 }
 
+function generateAccessToken(id) {
+    return jwt.sign({ id }, config.tokens.access.secretKey, { expiresIn: config.tokens.access.expiresIn });
+}
+
+function generateRefreshToken(id) {
+    return jwt.sign({ id }, config.tokens.refresh.secretKey, { expiresIn: config.tokens.refresh.expiresIn });
+}
+
 module.exports = {
     verifyToken,
-    jwtVerify
+    jwtVerify,
+    generateAccessToken,
+    generateRefreshToken
 }

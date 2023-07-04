@@ -1,0 +1,1 @@
+export type roomStatus = "default"|"room_found"|"searching"|"room_closed"|null;

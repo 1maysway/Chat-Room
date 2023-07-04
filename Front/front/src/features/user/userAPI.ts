@@ -1,34 +1,27 @@
-import axios from "axios";
 import Cookies from "universal-cookie";
 import config from "../../config.json";
 import { useNavigate } from "react-router-dom";
+import { axiosClient } from "../../Utils";
 
 //////////////////////
 
-axios.defaults.withCredentials = true;
-
-export const fetchUserInitialData = async () => {
+export const authentication = async () => {
   try {
-    const cookie = new Cookies();
-    const access_token = cookie.get("acs");
+    // const cookie = new Cookies();
+    // const access_token = cookie.get("acs");
+    // const refresh_token = cookie.get('rfs');
 
-    console.log(access_token);
+    // console.log(access_token);
 
-    if (!access_token) {
-      return {
-        loggedIn: false,
-        info: null,
-      };
-    }
+    // if (!access_token && !refresh_token) {
+    //   return {
+    //     loggedIn: false,
+    //     info: null,
+    //   };
+    // }
 
     return (
-      await axios.post(config.SERVER_BASE_URL + "userInitialData", {
-        access_token,
-      },{
-        headers: {
-          Authorization:access_token
-        }
-      })
+      await axiosClient.post(config.SERVER_BASE_URL + "auth")
     ).data.data;
   } catch (error) {
     console.error(error);
@@ -52,7 +45,7 @@ export const logIn = async (email: string, password: string) => {
   try {
     // const cookie = new Cookies();
 
-    const res = await axios.post(config.SERVER_BASE_URL + "auth/login", {
+    const res = await axiosClient.post(config.SERVER_BASE_URL + "auth/login", {
       email,
       password,
     });
@@ -74,7 +67,7 @@ export const register = async (
   username: string
 ) => {
     try {
-        const res = await axios.post(config.SERVER_BASE_URL + "auth/register", {
+        const res = await axiosClient.post(config.SERVER_BASE_URL + "auth/register", {
           email,
           password,
           username
@@ -85,3 +78,16 @@ export const register = async (
         return e;
       }
 };
+
+export const twoStep = async (user_id:number,confirmCode:string) => {
+  try {
+    const res = await axiosClient.post(config.SERVER_BASE_URL + "auth/two-step", {
+      user_id,
+      confirmCode,
+    });
+
+    return res;
+  } catch (e) {
+    return e;
+  }
+}

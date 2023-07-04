@@ -1,5 +1,5 @@
 import { Action, createSlice } from "@reduxjs/toolkit";
-import { Message } from "../../types/simplifiedDatabase";
+import { Message } from "../../types/simplifiedDatabaseTypes";
 
 export type MessageComplaint = {
   message: Message;

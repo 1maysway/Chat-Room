@@ -1,5 +1,5 @@
 import { ChangeEvent, useEffect, useState } from "react";
-import { MessageText } from "../../pages/Chat";
+import { MessageText, MessagesContainer } from "../../pages/Chat";
 import {
   Button,
   Dialog,
@@ -17,7 +17,7 @@ import {
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
 import { closeComplaintWindow } from "./complaintWindowSlice";
 import { convertDateTime, padZeroes } from "../../Utils";
-import { Complaint } from "../../types/simplifiedDatabase";
+import { Complaint } from "../../types/simplifiedDatabaseTypes";
 import { selectUser } from "../user/userSlice";
 import { createComplaint } from "./complaintWindowAPI";
 import { showNotification } from "../notification/notificationSlice";
@@ -29,6 +29,9 @@ import { showNotification } from "../notification/notificationSlice";
 //   };
 
 const ComplaintWindow = () => {
+
+  const descriptionMaxLength=500;
+
   const complaintValue = useAppSelector((state) => state.complaintWindow.value);
   const user = useAppSelector(selectUser);
   const dispatch = useAppDispatch();
@@ -44,6 +47,8 @@ const ComplaintWindow = () => {
     setTimeout(() => {
       dispatch(closeComplaintWindow());
       setIsSent(false);
+      setReason('');
+      setDescription('');
     }, 500);
   };
 
@@ -111,12 +116,12 @@ const ComplaintWindow = () => {
     >
       <form onSubmit={handleSend}>
         <DialogTitle>Create Complaint</DialogTitle>
-        <DialogContent dividers>
+        <DialogContent dividers sx={{overflow:'auto',maxHeight:"60vh"}}>
           <Grid container spacing={2} flexDirection={"column"}>
             {complaintValue.target && "message" in complaintValue.target && (
               <Grid item xs>
-                <Paper elevation={3} sx={{ padding: "12px" }}>
-                  <MessageText
+                <Paper elevation={3} sx={{ padding: "16px" }}>
+                  <MessagesContainer 
                     time={(() => {
                       const dataTime = convertDateTime(
                         complaintValue.target.message.timestamp,
@@ -128,11 +133,10 @@ const ComplaintWindow = () => {
                         padZeroes(dataTime.minute)
                       );
                     })()}
-                    text={complaintValue.target.message.text}
                     username={complaintValue.target.username}
                     avatar_url={complaintValue.target.avatar_url}
+                    messages={[complaintValue.target.message]}
                     urls={false}
-                    blockMargin={false}
                   />
                 </Paper>
               </Grid>
@@ -172,6 +176,9 @@ const ComplaintWindow = () => {
                     rows={5}
                     value={description}
                     onChange={handleDescriptionChange}
+                    error={description.length>descriptionMaxLength}
+                    helperText={description.length+"/"+descriptionMaxLength}
+                    inputProps={{maxLength:500}}
                   />
                 </FormControl>
               </Grid>

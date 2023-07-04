@@ -9,19 +9,21 @@ import MenuIcon from "@mui/icons-material/Menu";
 import Container from "@mui/material/Container";
 import Avatar from "@mui/material/Avatar";
 import Button from "@mui/material/Button";
-import Tooltip from "@mui/material/Tooltip";
 import MenuItem from "@mui/material/MenuItem";
-import AdbIcon from "@mui/icons-material/Adb";
 import { Link, useNavigate } from "react-router-dom";
-import Paper from "@mui/material/Paper";
-import { useAppDispatch, useAppSelector } from "../app/hooks";
+import { useAppSelector } from "../app/hooks";
 import { selectUser, selectUserStatus } from "../features/user/userSlice";
 import Cookies from "universal-cookie";
+import { axiosClient } from "../Utils";
+import config from "../config.json";
+import { useScreenOrientation } from "../hooks";
+import { isMobile } from "react-device-detect";
 
 function Header() {
   const user = useAppSelector(selectUser);
   const userStatus = useAppSelector(selectUserStatus);
   const navigate = useNavigate();
+  const orientation = useScreenOrientation();
 
   const pages = [
     {
@@ -31,7 +33,14 @@ function Header() {
       },
     },
   ];
-  const settings_loggedIn = [
+
+  type Setting={
+    title:string;
+    action:()=>any;
+    check?:()=>boolean;
+  }
+  
+  const settings_loggedIn:Setting[] = [
     {
       title: "Profile",
       action: () => {
@@ -40,15 +49,29 @@ function Header() {
     },
     {
       title: "Logout",
-      action: () => {
-        const cookie = new Cookies();
+      action: async () => {
+        // const cookie = new Cookies();
 
-        cookie.remove("acs");
+        // cookie.remove("acs");
+        // cookie.remove("rfs");
+        // cookie.remove("connect.sid");
+
+        await axiosClient
+          .post(config.SERVER_BASE_URL + "auth/logout")
+          .catch(() => {});
+
         window.location.reload();
       },
     },
+    {
+      title:"Admin",
+      action:async()=>{
+        navigate("/admin");
+      },
+      check:()=>true
+    }
   ];
-  const settings_loggedOut = [
+  const settings_loggedOut:Setting[] = [
     {
       title: "Sign in",
       action: () => {
@@ -80,31 +103,57 @@ function Header() {
   };
 
   return (
-    <AppBar position="static">
-      <Container>
-        <Toolbar disableGutters>
+    <AppBar position="fixed" sx={{ zIndex: 100, height: orientation.includes('landscape')&&isMobile?"8vw":"8vh" }}>
+      <Container sx={{ height: "100%" }}>
+        <Toolbar
+          disableGutters
+          sx={{
+            height: "100%",
+            minHeight: "100%",
+            display: "flex",
+            justifyContent: "space-between",
+          }}
+        >
           {/* <AdbIcon sx={{ display: { xs: 'none', md: 'flex' }, mr: 1 }} /> */}
-          <Box
-            sx={{
-              mr: 2,
-              display: { xs: "none", md: "flex" },
-            }}
-          >
-            <Link
-              to="/"
-              style={{
-                fontFamily: "monospace",
-                fontWeight: 700,
-                letterSpacing: ".3rem",
-                color: "inherit",
-                textDecoration: "none",
+          <Box sx={{display: { xs: "none", md: "flex" },flexDirection:'row',height:"100%"}}>
+            <Box
+              sx={{
+                mr: 2,
+                display: "flex",
               }}
             >
-              <h1>ANCHAT</h1>
-            </Link>
+              <Link
+                to="/"
+                style={{
+                  fontFamily: "monospace",
+                  fontWeight: 700,
+                  letterSpacing: ".3rem",
+                  color: "inherit",
+                  textDecoration: "none",
+                  display:'flex',
+                  alignItems:'center'
+                }}
+              >
+                <h1 style={{margin:0}}>ANCHAT</h1>
+              </Link>
+            </Box>
+            <Box sx={{display:"flex"}}>
+              {pages.map((page) => (
+                <Button
+                  key={page.title}
+                  onClick={() => {
+                    handleCloseNavMenu();
+                    page.action();
+                  }}
+                  sx={{ my: 2, color: "white", display: "block" }}
+                >
+                  {page.title}
+                </Button>
+              ))}
+            </Box>
           </Box>
 
-          <Box sx={{ flexGrow: 1, display: { xs: "flex", md: "none" } }}>
+          <Box sx={{ display: { xs: "flex", md: "none" } }}>
             <IconButton
               size="large"
               aria-label="account of current user"
@@ -149,9 +198,8 @@ function Header() {
           {/* <AdbIcon sx={{ display: { xs: 'flex', md: 'none' }, mr: 1 }} /> */}
           <Box
             sx={{
-              mr: 2,
+              // mr: 2,
               display: { xs: "flex", md: "none" },
-              flexGrow: 1,
             }}
           >
             <Link
@@ -164,35 +212,19 @@ function Header() {
                 textDecoration: "none",
               }}
             >
-              <h1>ANCHAT</h1>
+              <h1 style={{ margin: 0 }}>ANCHAT</h1>
             </Link>
-          </Box>
-          <Box sx={{ flexGrow: 1, display: { xs: "none", md: "flex" } }}>
-            {pages.map((page) => (
-              <Button
-                key={page.title}
-                onClick={() => {
-                  handleCloseNavMenu();
-                  page.action();
-                }}
-                sx={{ my: 2, color: "white", display: "block" }}
-              >
-                {page.title}
-              </Button>
-            ))}
           </Box>
 
           <Box sx={{ flexGrow: 0, flexDirection: "row", display: "flex" }}>
-            <Tooltip title="Open settings">
-              <IconButton onClick={handleOpenUserMenu} sx={{ p: 0 }}>
-                <Avatar
-                  alt={user.info?.username}
-                  src={user.info?.avatarUrl || ""}
-                >
-                  {user.info?.username[0]}
-                </Avatar>
-              </IconButton>
-            </Tooltip>
+            <IconButton onClick={handleOpenUserMenu} sx={{ p: 0 }}>
+              <Avatar
+                alt={user.info?.username}
+                src={user.info?.avatarUrl || ""}
+              >
+                {user.info?.username[0]}
+              </Avatar>
+            </IconButton>
             <Menu
               sx={{ mt: "45px" }}
               id="menu-appbar"
@@ -209,23 +241,23 @@ function Header() {
               open={Boolean(anchorElUser)}
               onClose={handleCloseUserMenu}
             >
-              {userStatus!=="loading" &&
+              {userStatus !== "loading" &&
                 (user.loggedIn ? settings_loggedIn : settings_loggedOut).map(
-                  (setting) => (
+                  (setting) => 
+                    (!setting.check || setting.check())&&
                     <MenuItem
-                      key={setting.title}
-                      onClick={() => {
-                        setting.action();
-                        handleCloseUserMenu();
-                      }}
-                    >
-                      {/* <Link to={"/asd"}> */}
-                      <Typography textAlign="center">
-                        {setting.title}
-                      </Typography>
-                      {/* </Link> */}
-                    </MenuItem>
-                  )
+                    key={setting.title}
+                    onClick={() => {
+                      setting.action();
+                      handleCloseUserMenu();
+                    }}
+                  >
+                    {/* <Link to={"/asd"}> */}
+                    <Typography textAlign="center">
+                      {setting.title}
+                    </Typography>
+                    {/* </Link> */}
+                  </MenuItem>
                 )}
             </Menu>
           </Box>

@@ -4,17 +4,25 @@
     },
     "tokens": {
         "access": {
-            "expiresIn": "1h",
+            "expiresIn": 600,
             "secretKey": "secretKey"
         },
         "refresh": {
-            "expiresIn": "10m",
+            "expiresIn": 60000,
             "secretKey": "refreshSecretKey"
         },
         "email_confirm": {
-            "expiresIn": "1h",
+            "expiresIn": 6000,
             "secretKey": "emailConfirmSecretKey"
+        },
+        "other": {
+            "expiresIn": 6000,
+            "secretKey": "otherSecretKey"
         }
+    },
+    "emailConfirm": {
+        "emailConfirmCodeExpires": 3600000,
+        "canSendNewCodeIn": 120000
     },
     "dbConfig": {
         "connectionString": "postgres://dqwequwv:QLZgf_PDJhU5sejHXvcUUt8J9SB3Y1nP@mouse.db.elephantsql.com/dqwequwv",

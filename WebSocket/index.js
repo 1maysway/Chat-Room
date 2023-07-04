@@ -3,8 +3,30 @@ const jwt = require("jsonwebtoken");
 const { verifyToken, jwtVerify } = require("./utils/Tokens");
 const config = require("./config.json");
 const pg = require("pg");
+const session = require('express-session');
+const RedisStore = require('connect-redis').default;
+const ioredis = require('ioredis');
+const { createClient } = require('redis');
+const { generateAccessToken, generateRefreshToken } = require('./utils/Tokens');
 
 /////////////////
+
+let redisClient = createClient({
+    port: 6379,
+})
+redisClient.connect().catch(console.error)
+
+let redisStore = new RedisStore({
+    client: redisClient,
+    prefix: "myapp:",
+})
+
+const sessionMiddleware = session({
+    store: redisStore,
+    secret: 'secret_key',
+    resave: false,
+    saveUninitialized: true,
+});
 
 const dbConfig = config.dbConfig;
 
@@ -98,6 +120,8 @@ async function findRoom(user, ws) {
         upref.gender,
     ];
 
+    console.log(values);
+
     const user_obj = {
         info: {
             id: user.id,
@@ -111,8 +135,10 @@ async function findRoom(user, ws) {
 
     await poolQuery(query, values)
         .then(async(res) => {
-            if (res.rows.length > 0) {
-                room = rooms.find((r) => r.info.id === res.rows[0].id);
+            console.log(res.rows);
+            room = (res.rows.length > 0 && rooms.find((r) => res.rows.map(r => r.id).includes(r.info.id))) || room;
+            console.log("FIND_ROOM ROOM", room && room.info);
+            if (room) {
                 room.users.push(user_obj);
 
                 const query =
@@ -169,15 +195,17 @@ async function findRoom(user, ws) {
     return room;
 }
 
-async function removeRoom(id) {
+async function removeRoom(id, initiator_id = null) {
     const room = rooms.find((room) => room.info.id === id);
-
-    const response = {
-        type: "room_closed",
-        message: "Room closed",
-    };
+    console.log(initiator_id);
 
     room.users.forEach((user) => {
+        console.log(user);
+        const response = {
+            type: "room",
+            status: user.info.id === initiator_id ? "default" : "room_closed",
+            message: user.info.id === initiator_id ? "Left the room" : "Room closed",
+        };
         user.ws.send(JSON.stringify(response));
     });
 
@@ -204,26 +232,33 @@ wss.on("connection", (ws, req) => {
     let room_id = null;
 
     ws.on("message", async(message) => {
-        try {
-            const data = JSON.parse(message);
+        sessionMiddleware(req, {}, async() => {
+            try {
+                const data = JSON.parse(message);
 
-            const tokenValidation = await verifyToken(data.data.auth.access_token);
+                if (!(data.data.auth.access_token || req.session.acs)) {
+                    return ws.send(JSON.stringify({ status: 403, message: "Forbidden" }));
+                }
 
-            switch (tokenValidation.status) {
-                case 401:
-                    ws.send(JSON.stringify({ status: 401, message: "Invalid token" }));
-                    return;
-                case 403:
-                    ws.send(JSON.stringify({ status: 403, message: "Forbidden" }));
-                    return;
-            }
+                const tokenValidation = await jwtVerify(req.session.acs, config.tokens.access.secretKey);
 
-            if (!user_data) {
-                await jwtVerify(
-                        data.data.auth.access_token,
+                if (!tokenValidation) {
+                    const tokenValidation = await jwtVerify(data.data.auth.refresh_token || req.session.rfs, config.tokens.refresh.secretKey);
+
+                    if (tokenValidation) {
+                        req.session.acs = generateAccessToken(tokenValidation.id, config.tokens.access.secretKey);
+                        req.session.rfs = generateRefreshToken(tokenValidation.id, config.tokens.refresh.secretKey);
+                    } else {
+                        return ws.send(JSON.stringify({ status: 401, message: "Invalid tokens" }));
+                    }
+                }
+
+                if (!user_data) {
+                    const decoded = await jwtVerify(
+                        req.session.acs,
                         config.tokens.access.secretKey
                     )
-                    .then(async(decoded) => {
+                    if (decoded) {
                         const selectedKeys = [
                             "country",
                             "city",
@@ -252,107 +287,107 @@ wss.on("connection", (ws, req) => {
                             .catch((error) => {
                                 console.error(error);
                             });
+                    }
+                }
+
+                console.log(data.type);
+
+                switch (data.type) {
+                    case "find_room":
+                        {
+                            if (findRoomById(room_id)) {
+                                ws.send(
+                                    JSON.stringify({ status: 403, message: "Room already exists" })
+                                );
+                                break;
+                            }
+
+                            console.log(data.data.preferences);
+                            const preferences = {
+                                country: null,
+                                city: null,
+                                language: null,
+                                age_from: null,
+                                age_to: null,
+                                gender: null,
+                                ...data.data.preferences,
+                            };
+                            user_data.preferences = preferences;
+
+                            const room = await findRoom(user_data, ws);
+                            console.log("ROOM", room);
+                            room_id = room.info.id;
+                            const response = {
+                                type: "room",
+                                status: room.users.length > 1 ? "room_found" : "searching",
+                                data: {
+                                    room_found: room.users.length > 1,
+                                    users: room.users.map((user) => user.info),
+                                    room_id
+                                },
+                            };
+
+                            room.users.forEach((user) => {
+                                user.ws.send(JSON.stringify(response));
+                            });
+                            break;
+                        }
+                    case "leave_room":
+                        {
+                            if (!findRoomById(room_id)) {
+                                ws.send(JSON.stringify({ status: 403, message: "Room not found" }));
+                                break;
+                            }
+                            removeRoom(room_id, user_data.id);
+                            break;
+                        }
+                    case "send_message":
+                        {
+                            console.log(room_id);
+                            if (!findRoomById(room_id)) {
+                                ws.send(JSON.stringify({ status: 403, message: "Room not found" }));
+                                break;
+                            }
+
+                            const room = findRoomById(room_id);
+                            console.log(room.info);
+
+                            const query =
+                                'INSERT INTO "Messages" (room_id,sender_id,text,to_message_id,type) VALUES ($1, $2, $3, $4, $5) RETURNING id,sender_id,text,in_room_id,to_message_id,type,timestamp';
+                            const values = [
+                                room_id,
+                                user_data.id,
+                                data.data.message.text,
+                                data.data.message.to_message_id || null,
+                                data.data.message.type || 0,
+                            ];
+                            const message_to_send = (await poolQuery(query, values)).rows[0];
+
+                            room.users.forEach((user) => {
+                                user.ws.send(
+                                    JSON.stringify({
+                                        type: "new_message",
+                                        data: {
+                                            message: message_to_send,
+                                        },
+                                    })
+                                );
+                            });
+
+                            break;
+                        }
+                }
+            } catch (error) {
+                console.error(error);
+
+                ws.send(
+                    JSON.stringify({
+                        status: 500,
+                        message: "Internal server error",
                     })
-                    .catch((error) => {
-                        console.error(error);
-                    });
+                );
             }
-
-            console.log(data.type);
-
-            switch (data.type) {
-                case "find_room":
-                    {
-                        if (findRoomById(room_id)) {
-                            ws.send(
-                                JSON.stringify({ status: 403, message: "Room already exists" })
-                            );
-                            break;
-                        }
-                        const preferences = {
-                            country: null,
-                            city: null,
-                            language: null,
-                            age_from: null,
-                            age_to: null,
-                            gender: null,
-                            ...data.data.preferences,
-                        };
-                        user_data.preferences = preferences;
-
-                        const room = await findRoom(user_data, ws);
-                        console.log(room);
-                        room_id = room.info.id;
-                        const response = {
-                            type: "room_searching",
-                            message: room.users.length > 1 ? "Room found" : "Searching...",
-                            data: {
-                                room_found: room.users.length > 1,
-                                users: room.users.map((user) => user.info),
-                                room_id
-                            },
-                        };
-
-                        room.users.forEach((user) => {
-                            user.ws.send(JSON.stringify(response));
-                        });
-                        break;
-                    }
-                case "leave_room":
-                    {
-                        if (!findRoomById(room_id)) {
-                            ws.send(JSON.stringify({ status: 403, message: "Room not found" }));
-                            break;
-                        }
-                        removeRoom(room_id);
-                        break;
-                    }
-                case "send_message":
-                    {
-                        console.log(room_id);
-                        if (!findRoomById(room_id)) {
-                            ws.send(JSON.stringify({ status: 403, message: "Room not found" }));
-                            break;
-                        }
-
-                        const room = findRoomById(room_id);
-                        console.log(room.info);
-
-                        const query =
-                            'INSERT INTO "Messages" (room_id,sender_id,text,to_message_id,type) VALUES ($1, $2, $3, $4, $5) RETURNING id,sender_id,text,in_room_id,to_message_id,type,timestamp';
-                        const values = [
-                            room_id,
-                            user_data.id,
-                            data.data.message.text,
-                            data.data.message.to_message_id || null,
-                            data.data.message.type || 0,
-                        ];
-                        const message_to_send = (await poolQuery(query, values)).rows[0];
-
-                        room.users.forEach((user) => {
-                            user.ws.send(
-                                JSON.stringify({
-                                    type: "new_message",
-                                    data: {
-                                        message: message_to_send,
-                                    },
-                                })
-                            );
-                        });
-
-                        break;
-                    }
-            }
-        } catch (error) {
-            console.error(error);
-
-            ws.send(
-                JSON.stringify({
-                    status: 500,
-                    message: "Internal server error",
-                })
-            );
-        }
+        })
     });
 
     ws.on("close", () => {
@@ -360,7 +395,9 @@ wss.on("connection", (ws, req) => {
 
         if (room_id) {
             const room = findRoomById(room_id);
-            room && removeRoom(room.info.id);
+            room && removeRoom(room.info.id, user_data.id);
         }
     });
 });
+
+console.log("WebSocket started.")
