@@ -8,7 +8,7 @@ function verifyToken(init, req, res, next) {
     const { acs: access_token = req.cookies.acs, rfs: refresh_token = req.cookies.rfs } = req.session;
 
     if (!access_token && !refresh_token) {
-        return res.status(403).send({
+        return res.status(401).send({
             data: {
                 auth: false,
             }
@@ -72,7 +72,7 @@ function verifyAdmin(init, req, res, next) {
     const { acs: access_token = req.cookies.acs, rfs: refresh_token = req.cookies.rfs } = req.session;
 
     if (!access_token) {
-        return res.status(403).send({
+        return res.status(401).send({
             data: {
                 auth: false
             }

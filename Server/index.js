@@ -381,7 +381,7 @@ app.post("/auth/refresh-token", (req, res) => {
 
     jwt.verify(refreshToken, refreshSecretKey, (err, decoded) => {
         if (err) {
-            return res.status(403).send({ message: "Рефреш токен недействителен." });
+            return res.status(404).send({ message: "Рефреш токен недействителен." });
         }
 
         const userId = decoded.id;
@@ -700,7 +700,7 @@ app.post("/auth/two-step", (req, res) => {
     // console.log("headers: ", req.headers);
 
     if (confirmCodes[user_id].confirmCode !== confirmCode) {
-        return res.status(403).send({
+        return res.status(404).send({
             data: {
                 auth: false,
                 message: {
