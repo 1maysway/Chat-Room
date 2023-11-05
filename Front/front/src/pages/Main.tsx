@@ -3,8 +3,6 @@ import { useAppDispatch, useAppSelector } from "../app/hooks";
 import { selectUser } from "../features/user/userSlice";
 
 const Main: React.FC = () => {
-  const user = useAppSelector(selectUser);
-
   return (
     <Container sx={{ height: "100%", flexGrow: 1, display: "flex" }}>
       <Box
